@@ -17,3 +17,11 @@ void impg_seqhashDestroy(Seqhash *sh)
 {
     seqhashDestroy(sh);
 }
+
+/* Suppress syngBWTnext debug output by setting pathCount to a non-zero value.
+   The debug print triggers when pathCount == PATH_DEBUG (both default to 0). */
+extern int pathCount;
+void impg_syng_suppress_debug(void)
+{
+    pathCount = -1;
+}
