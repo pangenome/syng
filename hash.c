@@ -95,7 +95,15 @@ Hash hashCreate (int n)
   TrueHash *h = new0 (1, TrueHash) ;
 
   if (sizeof(I64) != sizeof(HashKey)) die ("type size mismatch in hashCreate") ;
-  REMOVED = hashInt((I64MAX-1)^I64MAX) ;
+  /* IMPG PATCH: The original `hashInt((I64MAX-1)^I64MAX)` simplifies to
+   * `hashInt(1) = I64MAX - 1`, which is a perfectly legitimate hash of the
+   * integer key 1. With the original sentinel, startCount/hashAdd on key 1
+   * treated every call as a REMOVED slot and assigned a fresh index each
+   * time, so two paths starting at GBWT node 1 both got start_count=0 and
+   * collided. We use a middle-of-range value that is never produced by
+   * hashInt() for any small-magnitude integer (impg/syng keys are always
+   * GBWT node IDs bounded by ~2^24 in practice). */
+  REMOVED.i = 0x4000000000000000LL ;
   
   if (n < 64) n = 64 ;
   --n ;
