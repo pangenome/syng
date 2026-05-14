@@ -61,6 +61,19 @@ The impg test suite has both FFI-level and CLI-level regression tests
 (`tests/test_syng_startcount.rs` and
 `tests/test_syng_integration.rs::test_syng_identical_sequences_build_and_query`).
 
+### pending — add direct SyngBWT node construction helpers
+
+Adds `impg_syngBWTsetNode()`, `impg_syngBWTstartCountAdd()`, and
+`impg_syngBWTlocBuild()` in `syngbwt3.c` so impg can build GBWT nodes from
+already-ranked per-node edge/run arrays. This is the C hook needed for
+parallel syng construction: Rust can assign global directed-edge occurrence
+ranks and reduce each node independently, then install the resulting
+`NodeSide`/`Rskip` structures without replaying every path through
+`syngBWTpathAdd()`.
+
+This is additive and does not change the existing syng builder, reader, writer,
+or matcher behavior.
+
 ## Workflow for syncing upstream changes
 
 ```bash
