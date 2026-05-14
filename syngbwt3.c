@@ -153,6 +153,50 @@ static Node nodeCreate (I32 in, U32 inOff, I32 out, U32 outOff)
   return node ;
 }
 
+static inline bool nodeSideCanBeSimple (U32 offset, U32 count)
+{
+  return offset <= 0xffffu && count <= 0xffffu ;
+}
+
+static Rskip rskipBuildSingleDynamicSyng (I32 sync, U32 offset, U32 count)
+{
+  I64 iSym = 0, runLen = count ;
+  Rskip rs = rsBuildDynamicSyng (1, &sync, &offset, 1, &iSym, &runLen) ;
+  rsDirSetCount (rs, 0, count) ;
+  return rs ;
+}
+
+static Rskip rskipBuildSingleFixedSyng (I32 sync, U32 offset, U32 count)
+{
+  I64 iSym = 0, runLen = count ;
+  return rsBuildFixedSyng (1, &sync, &offset, 1, &iSym, &runLen) ;
+}
+
+static void nodeCreateOnePath (Node *node, U8 *status, I32 in, U32 inOff,
+			       I32 out, U32 outOff, bool countInSimple)
+{
+  bool simpleIn = nodeSideCanBeSimple (inOff, 1) ;
+  bool simpleOut = nodeSideCanBeSimple (outOff, 1) ;
+
+  *status = NODE_EXISTS ;
+
+  if (simpleIn)
+    { node->in.sync = in ; node->in.offset = inOff ;
+      node->in.count = (countInSimple || !simpleOut) ? 1 : 0 ;
+      *status |= NODE_SIMPLE_IN ;
+    }
+  else
+    node->in.rs = rskipBuildSingleDynamicSyng (in, inOff, 1) ;
+
+  if (simpleOut)
+    { node->out.sync = out ; node->out.offset = outOff ;
+      node->out.count = (!countInSimple || !simpleIn) ? 1 : 0 ;
+      *status |= NODE_SIMPLE_OUT ;
+    }
+  else
+    node->out.rs = rskipBuildSingleDynamicSyng (out, outOff, 1) ;
+}
+
 static inline void nodePrint (Node *n, U8 s)
 {
   if (s & NODE_SIMPLE_IN)
@@ -279,14 +323,9 @@ static U32 syngBWTadd (SyngBWT *sb, I32 k, I32 in, U32 inOff, U32 j, I32 out, U3
   if (!*s)               // empty - make a new simple node
     { assert (j == 0) ;
       if (isPositive)
-	{ *n = nodeCreate (in, inOff, out, outOff) ;
-	  n->in.count = 1 ;
-	}
+	nodeCreateOnePath (n, s, in, inOff, out, outOff, true) ;
       else
-	{ *n = nodeCreate (-out, outOff, -in, inOff) ;
-	  n->out.count = 1 ;
-	}
-      *s = NODE_SIMPLE ;
+	nodeCreateOnePath (n, s, -out, outOff, -in, inOff, false) ;
      return 0 ;
     }
 
@@ -637,8 +676,6 @@ static void *threadRead (void *arg)
   I32 *inSync   = new (EMax, I32),  *outSync   = new (eMax, I32) ;
   U32 *inOffset = new (EMax, U32),  *outOffset = new (eMax, U32) ;
   U32 *inSum    = new (EMax, U32),  *outSum    = new (eMax, U32) ;
-  I64 *inSym, *inRunLen, *outSym, *outRunLen ;
-
   if (!oneGoto (of, 'V', rt->v1)) die ("failed to locate to V line %u", rt->v1) ;
   oneReadLine (of) ; // read the first V line
   rt->eTotal = 0 ;
@@ -648,6 +685,7 @@ static void *threadRead (void *arg)
       Node *n = arrp(sb->node, i, Node) ;
       U8   *s = arrp(sb->status, i, U8) ;
       int   inN = 0, outN = 0, inNrun = 0, outNrun = 0 ;
+      I64 *inSym = 0, *inRunLen = 0, *outSym = 0, *outRunLen = 0 ;
       while (oneReadLine (of) && of->lineType != 'V')
 	switch (of->lineType)
 	  { 
@@ -670,16 +708,20 @@ static void *threadRead (void *arg)
       *s = 0 ; // default for empty node
       if (inN > 0 || outN > 0)
 	{ *s = NODE_EXISTS ;
-	  if (inN == 1)
+	  if (inN == 1 && !inNrun && nodeSideCanBeSimple (inOffset[0], inSum[0]))
 	    { *s |= NODE_SIMPLE_IN ;
 	      n->in.sync = inSync[0] ; n->in.offset = inOffset[0] ; n->in.count = inSum[0] ;
 	    }
+	  else if (inN == 1 && !inNrun)
+	    n->in.rs = rskipBuildSingleFixedSyng (inSync[0], inOffset[0], inSum[0]) ;
 	  else
 	    n->in.rs = rsBuildFixedSyng (inN, inSync, inOffset, inNrun, inSym, inRunLen) ;
-	  if (outN == 1)
+	  if (outN == 1 && !outNrun && nodeSideCanBeSimple (outOffset[0], outSum[0]))
 	    { *s |= NODE_SIMPLE_OUT ;
 	      n->out.sync = outSync[0] ; n->out.offset = outOffset[0] ; n->out.count = outSum[0] ;
 	    }
+	  else if (outN == 1 && !outNrun)
+	    n->out.rs = rskipBuildSingleFixedSyng (outSync[0], outOffset[0], outSum[0]) ;
 	  else
 	    n->out.rs = rsBuildFixedSyng (outN, outSync, outOffset, outNrun, outSym, outRunLen) ;
 	}
@@ -688,7 +730,7 @@ static void *threadRead (void *arg)
   
   newFree (inSync, EMax, I32) ;   newFree (outSync, eMax, I32) ;
   newFree (inOffset, EMax, U32) ; newFree (outOffset, eMax, U32) ;
-  newFree (inSum, EMax, U32) ;    newFree (outSum, eMax, I32) ;
+  newFree (inSum, EMax, U32) ;    newFree (outSum, eMax, U32) ;
   return 0 ;
 }
 
