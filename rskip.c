@@ -184,7 +184,7 @@ Rskip rsCreate (int nSym, I32 *symbol)
 Rskip rsCreateSyng (int nSym, I32 *symbol, U32 *offset)
 { Rskip rs ;
   int nNode = 2 * nSym ; // initial allowance for 2 per symbol
-  int max = 16, y = 2 + 4*nSym + nNode ; while (max < y) max <<= 1 ;
+  int max = 16, y = 2 + LINEAR_SYNG_DIR_UNITS*nSym + nNode ; while (max < y) max <<= 1 ;
   if (max <= MAX_LINEAR)
     { rs = rsNew (LINEAR_SYNG, nSym, max) ;
       for (LinearSyngDir *lsd = linearSyngDir (rs) ; nSym-- ; ++lsd)
@@ -802,7 +802,7 @@ static Rskip rebuildAddLinear (Rskip rs, int k, U32 kSym)
       if (rsType(rs) == LINEAR)
 	memcpy (rsOut.linear+2, rs.linear+2, 2*nSym*sizeof(Linear)) ;
       else if (rsType(rs) == LINEAR_SYNG)
-	memcpy (rsOut.linear+2, rs.linear+2, 4*nSym*sizeof(Linear)) ;
+	memcpy (rsOut.linear+2, rs.linear+2, LINEAR_SYNG_DIR_UNITS*nSym*sizeof(Linear)) ;
       if (fillLinearNodes (rsOut, nRun, iSym, runLen))
 	{ rsDestroy (rs) ;
 	  rs = rsOut ;

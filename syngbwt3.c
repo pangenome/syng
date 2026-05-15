@@ -605,6 +605,87 @@ bool syngBWTmatchNext (SyngBWTpath *sbp, I32 nextNode, U32 nextOff, U32 *low, U3
     return false ;
 }
 
+static inline U32 syngBWTnextAbsRank (SyngBWT *sb, I32 currentNode, I32 nextNode,
+                                      U32 nextOff, U32 edgeRank)
+{
+  if (!nextNode) return edgeRank ;
+  if (nextNode > 0)
+    { I32 kPos = nextNode ;
+      U8 s = arr(sb->status, kPos, U8) ;
+      if (!s) die ("syngBWTnextAbsRank %d hit an empty node", nextNode) ;
+      if (!(s & NODE_SIMPLE_IN))
+        edgeRank += rsDirRankSyng (arrp(sb->node, kPos, Node)->in.rs, currentNode, nextOff) ;
+    }
+  else
+    { I32 kPos = -nextNode ;
+      U8 s = arr(sb->status, kPos, U8) ;
+      if (!s) die ("syngBWTnextAbsRank %d hit an empty node", nextNode) ;
+      if (!(s & NODE_SIMPLE_OUT))
+        edgeRank += rsDirRankSyng (arrp(sb->node, kPos, Node)->out.rs, -currentNode, nextOff) ;
+    }
+  return edgeRank ;
+}
+
+bool syngBWTincomingRank (SyngBWT *sb, I32 node, I32 prevNode, U32 prevOff,
+                          U32 rank, U32 *absRank)
+{
+  bool isPositive = (node >= 0) ;
+  I32  kPos = isPositive ? node : -node ;
+  if (kPos >= arrayMax(sb->node))
+    die ("syngBWTincomingRank: node %d >= arrayMax(sb->node) %lld", node, arrayMax(sb->node)) ;
+  U8 s = arr(sb->status, kPos, U8) ;
+  if (!s) die ("syngBWTincomingRank %d hit an empty node", node) ;
+
+  U32 out = rank ;
+  if (isPositive)
+    { if (!(s & NODE_SIMPLE_IN))
+        out += rsDirRankSyng (arrp(sb->node, kPos, Node)->in.rs, prevNode, prevOff) ;
+    }
+  else
+    { if (!(s & NODE_SIMPLE_OUT))
+        out += rsDirRankSyng (arrp(sb->node, kPos, Node)->out.rs, -prevNode, prevOff) ;
+    }
+
+  *absRank = out ;
+  return true ;
+}
+
+bool syngBWTadvanceRank (SyngBWT *sb, I32 node, U32 absRank,
+                         I32 *nextNode, U32 *nextOff, U32 *nextAbsRank)
+{
+  bool isPositive = (node >= 0) ;
+  I32  kPos = isPositive ? node : -node ;
+  if (kPos >= arrayMax(sb->node))
+    die ("syngBWTadvanceRank: node %d >= arrayMax(sb->node) %lld", node, arrayMax(sb->node)) ;
+  Node n = arr(sb->node, kPos, Node) ;
+  U8   s = arr(sb->status, kPos, U8) ;
+  if (!s) die ("syngBWTadvanceRank %d hit an empty node", node) ;
+
+  I32 out = 0 ;
+  U32 off = 0 ;
+  U32 edgeRank = absRank ;
+  if (isPositive)
+    { if (s & NODE_SIMPLE_OUT)
+        { out = n.out.sync ; off = n.out.offset ; }
+      else
+        edgeRank = rsFindSyng (n.out.rs, absRank, &out, &off) ;
+    }
+  else
+    { if (s & NODE_SIMPLE_IN)
+        { out = -n.in.sync ; off = n.in.offset ; }
+      else
+        { edgeRank = rsFindSyng (n.in.rs, absRank, &out, &off) ;
+          out = -out ;
+        }
+    }
+
+  if (!out) return false ;
+  *nextNode = out ;
+  *nextOff = off ;
+  *nextAbsRank = syngBWTnextAbsRank (sb, node, out, off, edgeRank) ;
+  return true ;
+}
+
 /****************************************************************/
 /********************* write the SyngBWT ************************/
 
