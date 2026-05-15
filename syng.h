@@ -55,6 +55,10 @@ SyngBWTpath   *syngBWTpathStartOld (SyngBWT *sb,   I32 startNode, U32 count) ; /
 bool           syngBWTpathNext (SyngBWTpath *sbp,  I32 *nextNode, U32 *nextPos) ;
 SyngBWTpath   *syngBWTmatchStart (SyngBWT *sb,     I32 startNode, U32 *high) ;
 bool           syngBWTmatchNext (SyngBWTpath *sbp, I32 nextNode, U32 nextOff, U32 *low, U32 *high) ;
+bool           syngBWTincomingRank (SyngBWT *sb, I32 node, I32 prevNode, U32 prevOff,
+                                     U32 rank, U32 *absRank) ;
+bool           syngBWTadvanceRank (SyngBWT *sb, I32 node, U32 absRank,
+                                    I32 *nextNode, U32 *nextOff, U32 *nextAbsRank) ;
 void           syngBWTpathDestroy (SyngBWTpath *sbp) ;
 void           syngBWTstat (SyngBWT *sb) ;
 bool           syngBWTlocFind (SyngBWT *sb, I64 loc, I64 *file, I64 *path, I64 *offset) ;

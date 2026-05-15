@@ -37,7 +37,7 @@
 // high frequency symbols come early, so we get reasonable search times. I could maintain a hash
 // table for this for large symbol lists...
 
-// For use in syng (#define SYNG) we also keep for each symbol (a sync) a U16 offset, and we also need
+// For use in syng (#define SYNG) we also keep for each symbol (a sync) a U32 offset, and we also need
 // functionality to find the offset of a specific (sync, offset) in the list of these. In this case
 // matching must be to both symbol and offset.
 
@@ -95,9 +95,11 @@ static inline int rsType (Rskip rs) { return rs.linear[1].type ; }
 
 typedef struct {
   I32 sym ;
-  U16 count ;
-  U16 offset ;
+  U32 offset ;
+  U32 count ;
 } LinearSyngDir ;
+static const int LINEAR_SYNG_DIR_UNITS =
+  (sizeof(LinearSyngDir) + sizeof(Linear) - 1) / sizeof(Linear) ;
 static inline LinearSyngDir *linearSyngDir (Rskip rs) { return (LinearSyngDir*) (rs.linear+2) ;  }
 // a list of nSym of these following the header contains the directory information for syng
 
@@ -182,7 +184,7 @@ Rskip rsCreate (int nSym, I32 *symbol)
 Rskip rsCreateSyng (int nSym, I32 *symbol, U32 *offset)
 { Rskip rs ;
   int nNode = 2 * nSym ; // initial allowance for 2 per symbol
-  int max = 16, y = 2 + 4*nSym + nNode ; while (max < y) max <<= 1 ;
+  int max = 16, y = 2 + LINEAR_SYNG_DIR_UNITS*nSym + nNode ; while (max < y) max <<= 1 ;
   if (max <= MAX_LINEAR)
     { rs = rsNew (LINEAR_SYNG, nSym, max) ;
       for (LinearSyngDir *lsd = linearSyngDir (rs) ; nSym-- ; ++lsd)
@@ -445,7 +447,7 @@ static int linearSize (int type, int nSym, int nRun, I64 *runLen)
     }
   if (sum > MAX_BIG) size = MAX_LINEAR+1 ;
   if (type == LINEAR) size += 2*nSym ; // for symbol directory
-  else if (type == LINEAR_SYNG) size += 4*nSym ; // for symbol, offset, count directory
+  else if (type == LINEAR_SYNG) size += LINEAR_SYNG_DIR_UNITS*nSym ; // for symbol, offset, count directory
   return size ;
 }
 
@@ -457,7 +459,7 @@ static bool fillLinearNodes (Rskip rs, int nRun, I64 *iSym, I64 *runLen)
   Linear *min = rs.linear + 2 ;
   U64 total = 0 ;
 
-  if (rsType(rs) == LINEAR_SYNG) min += 4*rs.linear->nSym ;
+  if (rsType(rs) == LINEAR_SYNG) min += LINEAR_SYNG_DIR_UNITS*rs.linear->nSym ;
   else if (rsType(rs) == LINEAR) min += 2*rs.linear->nSym ;
 
   for (int i = 0 ; i < nRun ; ++i, --node)
@@ -708,7 +710,7 @@ static inline int linearSpace (Rskip rs) // returns number of Linear structs ava
     {
     case LINEAR_RAW:  return rs.linear[1].free - 1 ;
     case LINEAR:      return rs.linear[1].free - (1 + 2*rs.linear->nSym) ;
-    case LINEAR_SYNG: return rs.linear[1].free - (1 + 4*rs.linear->nSym) ;
+    case LINEAR_SYNG: return rs.linear[1].free - (1 + LINEAR_SYNG_DIR_UNITS*rs.linear->nSym) ;
     }
   return 0 ;
 }
@@ -800,7 +802,7 @@ static Rskip rebuildAddLinear (Rskip rs, int k, U32 kSym)
       if (rsType(rs) == LINEAR)
 	memcpy (rsOut.linear+2, rs.linear+2, 2*nSym*sizeof(Linear)) ;
       else if (rsType(rs) == LINEAR_SYNG)
-	memcpy (rsOut.linear+2, rs.linear+2, 4*nSym*sizeof(Linear)) ;
+	memcpy (rsOut.linear+2, rs.linear+2, LINEAR_SYNG_DIR_UNITS*nSym*sizeof(Linear)) ;
       if (fillLinearNodes (rsOut, nRun, iSym, runLen))
 	{ rsDestroy (rs) ;
 	  rs = rsOut ;
@@ -848,7 +850,7 @@ static bool doubleLinear (Rskip *rsp) // extends space
 
   // copy header and directory entries
   int nHeader = 2 ;
-  if (rsType(rs) == LINEAR_SYNG) nHeader += 4*nSym ;
+  if (rsType(rs) == LINEAR_SYNG) nHeader += LINEAR_SYNG_DIR_UNITS*nSym ;
   else if (rsType(rs) == LINEAR) nHeader += 2*nSym ;
   memcpy (nNew, nOld, nHeader*sizeof(Linear)) ; 
   rs2.linear->max = newMax ; // need to change this
