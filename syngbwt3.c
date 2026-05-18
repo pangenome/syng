@@ -852,14 +852,14 @@ SyngBWT *syngBWTread (OneFile *of)
     { pthread_join (threads[i], 0) ; // wait for the threads to complete
       eTotal += rt[i].eTotal ;
     }
-  printf ("read GBWT with %'lld vertices and %'lld edges from %s\n", nv, eTotal, oneFileName(of)) ;
+  fprintf (stderr, "read GBWT with %'lld vertices and %'lld edges from %s\n", nv, eTotal, oneFileName(of)) ;
 
   arrayMax (sb->node) = nv+1 ; // need to set these because we filled with arrp() for thread safety
   arrayMax (sb->status) = nv+1 ;
 
   newFree (threads, nThread, pthread_t) ;
   newFree (rt, nThread, ReadThread) ;
-  timeUpdate (stdout) ;
+  timeUpdate (stderr) ;
   return sb ;
 }
 

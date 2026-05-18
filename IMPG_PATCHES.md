@@ -23,6 +23,12 @@ Adds a runtime toggle to silence the C `printf` debug output from
 `syngBWTnext` et al. Lives in `impg_syng_helpers.c`. Additive, no upstream file
 changes.
 
+### local — keep syng GBWT load diagnostics off stdout
+
+Redirects `syngBWTread`'s "read GBWT..." diagnostic and `timeUpdate` summary
+from stdout to stderr. impg streams BED/GFA/FASTA query results on stdout, so
+native diagnostics must not be mixed into machine-readable output.
+
 ### `ce46949` — fix: hash REMOVED sentinel collides with hashInt(1)
 
 **Genuine upstream bug.** Patches `hash.c` line 98.
