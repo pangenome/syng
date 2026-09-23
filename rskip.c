@@ -637,7 +637,7 @@ static Rskip buildDynamic (U8 type, int nSym, int nRun, I64 *iSym, I64 *runLen) 
   rs.dynamic->count = rs.dynamic->sCount = 0 ;      // need to clear
   rs.dynamic->max = 1+nNode ;      // have to set these after building, since space used in building
   rs.dynamic->maxDepth = maxDepth ;
-  rs.dynamic->start = sTop[symMax] ;
+  rs.dynamic->start = nRun ? sTop[symMax] : 0 ; // nRun == 0 leaves no columns - start 0 marks empty
   rs.dynamic->nSym = nSym ;
   rs.dynamic->free = freeNode ;
   rs.linear[1].type = type ;
