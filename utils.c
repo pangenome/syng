@@ -66,8 +66,11 @@ char *getCommandLine (void) { return commandLine ; }
 
 //#define DEBUG_MEMORY
 
-static unsigned long totalAllocated = 0 ;
-static unsigned long maxAllocated = 0 ;
+// IMPG PATCH: thread-local. These counters are hit by every myalloc/myfree,
+// including from concurrent Rayon queries over one shared SyngIndex, where
+// non-atomic updates are a data race (and get miscompiled under LTO).
+static _Thread_local unsigned long totalAllocated = 0 ;
+static _Thread_local unsigned long maxAllocated = 0 ;
 
 void *myalloc (size_t size)
 {
@@ -234,8 +237,9 @@ struct timeval {
 } ;
 #endif /* RUSAGE STRUCTURE_DEFINITIONS */
 
-static struct rusage rOld, rFirst ;
-static struct timeval tOld, tFirst ;
+// IMPG PATCH: thread-local, same reason as the allocation counters above.
+static _Thread_local struct rusage rOld, rFirst ;
+static _Thread_local struct timeval tOld, tFirst ;
 
 void timeUpdate (FILE *f)
 {

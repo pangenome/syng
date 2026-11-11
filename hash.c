@@ -81,12 +81,14 @@ static inline I64 deltaFunc (TrueHash *h, HashKey hk)
 
 static HashKey REMOVED ;
 
-static int nCreated = 0 ;
-static int nDestroyed = 0 ;
-static I64 nAdded = 0 ;
-static I64 nBounced = 0 ;
-static I64 nFound = 0 ;
-static I64 nNotFound = 0 ;
+// IMPG PATCH: thread-local. hashFind/hashAdd run on every concurrent GBWT
+// walk, so plain static counters are a data race under multi-threaded query.
+static _Thread_local int nCreated = 0 ;
+static _Thread_local int nDestroyed = 0 ;
+static _Thread_local I64 nAdded = 0 ;
+static _Thread_local I64 nBounced = 0 ;
+static _Thread_local I64 nFound = 0 ;
+static _Thread_local I64 nNotFound = 0 ;
 
 /**************** create/destroy/clear ******************/
 

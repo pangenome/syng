@@ -67,6 +67,46 @@ The impg test suite has both FFI-level and CLI-level regression tests
 (`tests/test_syng_startcount.rs` and
 `tests/test_syng_integration.rs::test_syng_identical_sequences_build_and_query`).
 
+### local — make process-global mutable state safe under concurrent queries
+
+`SyngIndex` and `SyngMatcher` are `unsafe impl Send + Sync`, and impg queries
+them from Rayon worker threads. Several C translation units kept mutable
+*static* state that those concurrent paths write:
+
+| File | State | Fix |
+| :--- | :--- | :--- |
+| `utils.c` | `totalAllocated`, `maxAllocated`, `rOld`/`rFirst`, `tOld`/`tFirst` | `_Thread_local` |
+| `hash.c` | `nCreated`, `nDestroyed`, `nAdded`, `nBounced`, `nFound`, `nNotFound` | `_Thread_local` |
+| `array.c` | `totalAllocatedMemory`, `totalNumberCreated`, `totalNumberActive`, `reportArray` | `_Thread_local` |
+| `rskip.c` | `static U64 rng` in `randomDepth` | `_Thread_local` |
+| `syngbwt3.c` | `rsWrite` scratch pointers `iSym`/`runLen`/`size` | `_Thread_local` |
+| `syngbwt3.c`, `syng.c`, `impg_syng_helpers.c` | `pathCount` | `__atomic_*` builtins |
+
+Two groups of symptoms:
+
+1. **Counters** (`utils.c`, `hash.c`, `array.c`, `rskip.c`) are diagnostics only,
+   so a lost update costs a wrong number in a report. They are still undefined
+   behavior, and LLVM is free to miscompile the surrounding loop. The RNG in
+   `rskip.c` was already documented as per-thread, so `_Thread_local` is the
+   intended semantics.
+2. **Correctness** (`rsWrite`, `pathCount`):
+   - `rsWrite` frees and reallocates its `static I64 *iSym, *runLen` scratch
+     buffers. Two `SyngIndex` saves running at once — the normal case for the
+     `syng-local:<window>` partitioned pipeline — hit a double free or a
+     use-after-free on the second writer.
+   - `pathCount` is incremented while indexing and read by `syngBWTnext` /
+     `syngBWTmatch` as a debug gate. `impg_syng_suppress_debug` wrote it during
+     queries. All accesses now use `__atomic_load_n` / `__atomic_fetch_add` /
+     `__atomic_store_n`.
+
+Replacing the C statics with `_Thread_local` changes `hashStats()` /
+`arrayReport()` to report only the calling thread's totals. Nothing in impg
+reads those reports, so this only affects ad-hoc C-level debugging.
+
+**Should be upstreamed.** Reproducer: build two syng indices concurrently in one
+process (or run `impg partition` with `--gfa-engine syng-local:<window>`), or run
+any multi-threaded syng query under ThreadSanitizer.
+
 ## Workflow for syncing upstream changes
 
 ```bash
