@@ -37,10 +37,12 @@
 
 /********** Array : class to implement variable length arrays **********/
 
-static U64 totalAllocatedMemory = 0 ;
-static U64 totalNumberCreated = 0 ;
-static U64 totalNumberActive = 0 ;
-static Array reportArray = 0 ;
+// IMPG PATCH: thread-local. Arrays are created and destroyed on every
+// concurrent query; these bookkeeping values are diagnostics only.
+static _Thread_local U64 totalAllocatedMemory = 0 ;
+static _Thread_local U64 totalNumberCreated = 0 ;
+static _Thread_local U64 totalNumberActive = 0 ;
+static _Thread_local Array reportArray = 0 ;
 
 #define arrayExists(a) ((a) && (a)->magic == ARRAY_MAGIC)
 

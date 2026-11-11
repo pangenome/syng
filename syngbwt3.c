@@ -413,7 +413,9 @@ static U32 syngBWTnext (SyngBWT *sb, I32 k, I32 in, U32 inOff, U32 j, I32 *out, 
   U8   s = arr(sb->status, kPos, U8) ;
   if (!s) die ("syngBWTnext %d hit an empty node", k) ;
 
-  if (pathCount == PATH_DEBUG)
+  // IMPG PATCH: atomic read. `pathCount` is written by concurrent indexing
+  // threads, so a plain load is a data race.
+  if (__atomic_load_n (&pathCount, __ATOMIC_RELAXED) == PATH_DEBUG)
     { printf ("++path %d k %d in %d j %u\n", PATH_DEBUG, k, in, j) ; nodePrint (&n, s) ; }
 
   if (isPositive)
@@ -461,7 +463,8 @@ static inline bool syngBWTmatch (SyngBWT *sb, I32 k, I32 out, U32 off, U32 *low,
   U8   s = arr(sb->status, kPos, U8) ;
   if (!s) { printf ("MATCH at %d node empty!\n", k) ; return false ; }
 
-  if (pathCount == PATH_DEBUG)
+  // IMPG PATCH: atomic read, see above.
+  if (__atomic_load_n (&pathCount, __ATOMIC_RELAXED) == PATH_DEBUG)
     { printf ("++match %d k %d out %d low %u high %u\n", PATH_DEBUG, k, out, *low, *high) ;
       nodePrint (&n, s) ;
     }
@@ -697,8 +700,11 @@ void rsWrite (Rskip rs, OneFile *of, char eChar, char bChar, char cChar)
     { rsDirSyng (rs, i, &oneInt(of,0), &oneInt(of,1), &oneInt (of, 2)) ;
       oneWriteLine (of, eChar, 0, 0) ;
     }
-  static I64 *iSym, *runLen ;
-  static int size = 0 ;
+  // IMPG PATCH: thread-local. Two SyngIndex builds can run at once (e.g. the
+  // `syng-local:<window>` partitioned pipeline); shared static scratch buffers
+  // meant a double free / use-after-free on the second writer.
+  static _Thread_local I64 *iSym, *runLen ;
+  static _Thread_local int size = 0 ;
   if (rsSize(rs, 0, 0) > size)
     { if (size) { newFree (iSym, size, I64) ; newFree (runLen, size, I64) ; }
       size = rsSize(rs, 0, 0) ; iSym = new (size, I64) ; runLen = new (size, I64) ;

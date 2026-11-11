@@ -487,7 +487,7 @@ static bool fillLinearNodes (Rskip rs, int nRun, I64 *iSym, I64 *runLen)
 
 static inline int randomDepth (void) // generate randomDepth with very simple pseudorandom generator
 { int d = 1 ;
-  static U64 rng = 18982392197 ; // a prime - each thread's copy starts with this
+  static _Thread_local U64 rng = 18982392197 ; // a prime - each thread's copy starts with this
   static const int MAX_DEPTH = 32 ; // maximum allowed depth
   rng *= 479 ;  // 479 is prime
   while (((rng >> 24) & 0x7) < 3) { ++d ; rng *= 479 ; }
