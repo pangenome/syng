@@ -79,14 +79,27 @@ static inline I64 deltaFunc (TrueHash *h, HashKey hk)
 		      delta = (delta & h->mask) | 0x01 ; \
                     }
 
-static HashKey REMOVED ;
+/* IMPG PATCH: The original `hashInt((I64MAX-1)^I64MAX)` simplifies to
+ * `hashInt(1) = I64MAX - 1`, which is a perfectly legitimate hash of the
+ * integer key 1. With the original sentinel, startCount/hashAdd on key 1
+ * treated every call as a REMOVED slot and assigned a fresh index each
+ * time, so two paths starting at GBWT node 1 both got start_count=0 and
+ * collided. We use a middle-of-range value that is never produced by
+ * hashInt() for any small-magnitude integer (impg/syng keys are always
+ * GBWT node IDs bounded by ~2^24 in practice).
+ * A constant initializer: hashCreate() used to assign it on every call,
+ * a write that raced with hashAdd() readers in other threads. */
+static const HashKey REMOVED = { .i = 0x4000000000000000LL } ;
 
-static int nCreated = 0 ;
-static int nDestroyed = 0 ;
-static I64 nAdded = 0 ;
-static I64 nBounced = 0 ;
-static I64 nFound = 0 ;
-static I64 nNotFound = 0 ;
+// IMPG PATCH: thread-local. hashFind runs once per syngBWTpathStartOld and
+// hashAdd once per path start while indexing, from several threads at once,
+// so plain static counters are a data race.
+static _Thread_local int nCreated = 0 ;
+static _Thread_local int nDestroyed = 0 ;
+static _Thread_local I64 nAdded = 0 ;
+static _Thread_local I64 nBounced = 0 ;
+static _Thread_local I64 nFound = 0 ;
+static _Thread_local I64 nNotFound = 0 ;
 
 /**************** create/destroy/clear ******************/
 
@@ -95,16 +108,7 @@ Hash hashCreate (int n)
   TrueHash *h = new0 (1, TrueHash) ;
 
   if (sizeof(I64) != sizeof(HashKey)) die ("type size mismatch in hashCreate") ;
-  /* IMPG PATCH: The original `hashInt((I64MAX-1)^I64MAX)` simplifies to
-   * `hashInt(1) = I64MAX - 1`, which is a perfectly legitimate hash of the
-   * integer key 1. With the original sentinel, startCount/hashAdd on key 1
-   * treated every call as a REMOVED slot and assigned a fresh index each
-   * time, so two paths starting at GBWT node 1 both got start_count=0 and
-   * collided. We use a middle-of-range value that is never produced by
-   * hashInt() for any small-magnitude integer (impg/syng keys are always
-   * GBWT node IDs bounded by ~2^24 in practice). */
-  REMOVED.i = 0x4000000000000000LL ;
-  
+
   if (n < 64) n = 64 ;
   --n ;
   h->nbits = 1 ;	       /* make room, be twice as big as needed */

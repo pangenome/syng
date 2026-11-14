@@ -1,14 +1,13 @@
 # impg patches to syng
 
 This fork of [richarddurbin/syng](https://github.com/richarddurbin/syng) carries
-impg-specific patches on the `impg-integration` branch. Keep this file current
-as patches are added, removed, or upstreamed.
+impg-specific patches on its `main` branch, which the impg submodule pins.
+Keep this file current as patches are added, removed, or upstreamed.
 
-Upstream `main` should be kept in sync with `richarddurbin/syng:main` so we can
-rebase our patches on top as upstream moves. Do not force-push `main` — always
-rebase `impg-integration` against it.
+The `impg-integration` branch is older: it is an ancestor of `main` and holds
+only the first patches. Do not force-push `main`.
 
-## Current patches (on `impg-integration`, newest last)
+## Current patches (on `main`, newest last)
 
 ### `23b6547` — add impg FFI helper wrappers for static-inline functions
 
@@ -67,6 +66,53 @@ The impg test suite has both FFI-level and CLI-level regression tests
 (`tests/test_syng_startcount.rs` and
 `tests/test_syng_integration.rs::test_syng_identical_sequences_build_and_query`).
 
+### local — make process-global mutable state safe under concurrent queries
+
+`SyngIndex` and `SyngMatcher` are `unsafe impl Send + Sync`, and impg queries
+them from Rayon worker threads. Several C translation units kept mutable
+*static* state that those concurrent paths write:
+
+| File | State | Fix |
+| :--- | :--- | :--- |
+| `utils.c` | `totalAllocated`, `maxAllocated`, `rOld`/`rFirst`, `tOld`/`tFirst` | `_Thread_local` |
+| `hash.c` | `nCreated`, `nDestroyed`, `nAdded`, `nBounced`, `nFound`, `nNotFound` | `_Thread_local` |
+| `array.c` | `totalAllocatedMemory`, `totalNumberCreated`, `totalNumberActive`, `reportArray` | `_Thread_local` |
+| `rskip.c` | `static U64 rng` in `randomDepth` | `_Thread_local` |
+| `syngbwt3.c` | `rsWrite` scratch pointers `iSym`/`runLen`/`size` | `_Thread_local` |
+| `syngbwt3.c`, `syng.c`, `impg_syng_helpers.c` | `pathCount` | `__atomic_*` builtins |
+| `ONElib.c` | `HIST` (read by the `qsort` comparator `HSORT`), `nAlloc`, `totalAlloc` | `_Thread_local` |
+| `ONElib.c` | `isFirst` guarding the `sizeof` checks at file open | `_Static_assert`, flag removed |
+| `syngbwt3.c`, `rskip.c` | `callCount` in `syngBWTadd`, `rebuildAddLinear`, `addDirect` | `_Thread_local` |
+| `utils.c` | `isFirst` in `timeUpdate` | `_Thread_local`, same storage as `rOld`/`tOld` |
+| `utils.c` | `setlocale` on every `timeUpdate` call | `pthread_once` |
+| `hash.c` | `REMOVED`, assigned on every `hashCreate` | `static const` with a constant initializer |
+| `array.c` | `isFirst` in `uArrayCreate` | `_Thread_local` |
+
+Two groups of symptoms:
+
+1. **Counters** (`utils.c`, `hash.c`, `array.c`, `rskip.c`) are diagnostics only,
+   so a lost update costs a wrong number in a report. They are still undefined
+   behavior, and LLVM is free to miscompile the surrounding loop. The RNG in
+   `rskip.c` was already documented as per-thread, so `_Thread_local` is the
+   intended semantics.
+2. **Correctness** (`rsWrite`, `pathCount`):
+   - `rsWrite` frees and reallocates its `static I64 *iSym, *runLen` scratch
+     buffers. Two `SyngIndex` saves running at once — the normal case for the
+     `syng-local:<window>` partitioned pipeline — hit a double free or a
+     use-after-free on the second writer.
+   - `pathCount` is read by `syngBWTnext` / `syngBWTmatch` as a debug gate. `impg_syng_suppress_debug` wrote it during queries, and in the files impg compiles it is the only writer (the increment in `syng.c` is in the standalone `main`). These accesses now use the GCC/clang builtins `__atomic_load_n` / `__atomic_fetch_add` / `__atomic_store_n`.
+   - `HIST` in `ONElib.c` was repointed by every `vcCreateCodec` while another thread's `qsort` read it, so two ONE files written at once sorted a code table by the other file's histogram.
+
+`timeUpdate` prints nothing on a thread's first call and the deltas since that thread's previous call afterwards.
+
+Replacing the C statics with `_Thread_local` changes `hashStats()` /
+`arrayReport()` to report only the calling thread's totals. Nothing in impg
+reads those reports, so this only affects ad-hoc C-level debugging.
+
+**Should be upstreamed.** Reproducer: build two syng indices concurrently in one
+process (or run `impg partition` with `--gfa-engine syng-local:<window>`), or run
+any multi-threaded syng query under ThreadSanitizer.
+
 ## Workflow for syncing upstream changes
 
 ```bash
@@ -74,11 +120,8 @@ cd vendor/syng
 git fetch origin               # origin = pangenome/syng
 git fetch upstream             # add upstream = richarddurbin/syng if needed
 git checkout main
-git merge --ff-only upstream/main
+git merge upstream/main        # may need to resolve conflicts in hash.c
 git push origin main
-git checkout impg-integration
-git rebase main                # may need to resolve conflicts in hash.c
-git push --force-with-lease origin impg-integration
 ```
 
 Then in impg, bump the submodule pointer and commit.

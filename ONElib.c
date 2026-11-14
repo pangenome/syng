@@ -570,15 +570,12 @@ static OneFile *oneFileCreate (OneSchema **vsp, const char *type)
   char       *secondary = 0 ;
   OneSchema  *vs = *vsp ;
 
-  { static bool isFirst = true ;
-    if (isFirst)
-      { if (sizeof(I64) != 8) die ("ONElib compile error: sizeof(I64) = %d != 8", sizeof(I64)) ;
-        if (sizeof(I32) != 4) die ("ONElib compile error: sizeof(I32) = %d != 4", sizeof(I32)) ;
-        if (sizeof(I16) != 2) die ("ONElib compile error: sizeof(I16) = %d != 2", sizeof(I16)) ;
-        if (sizeof(I8) != 1) die ("ONElib compile error: sizeof(I8) = %d != 1", sizeof(I8)) ;
-        isFirst = false ;
-      }
-  }
+  // IMPG PATCH: compile-time checks. A shared `static bool isFirst` guarded
+  // the same four tests at run time and was an unlocked check-then-set.
+  _Static_assert (sizeof(I64) == 8, "ONElib compile error: sizeof(I64) != 8") ;
+  _Static_assert (sizeof(I32) == 4, "ONElib compile error: sizeof(I32) != 4") ;
+  _Static_assert (sizeof(I16) == 2, "ONElib compile error: sizeof(I16) != 2") ;
+  _Static_assert (sizeof(I8) == 1, "ONElib compile error: sizeof(I8) != 1") ;
   
   // transfer header info
   for (i = 0 ; i < 128 ; ++i)
@@ -3010,7 +3007,9 @@ void vcAddHistogram(OneCodec *vc, OneCodec *vh)
   //    with a zero count in the histogram.  The algorithm is by Larmore & Hirschberg,
   //    JACM 73, 3 (1990).
 
-uint64 *HIST;
+// IMPG PATCH: thread-local. qsort() calls HSORT on the calling thread, so
+// two files written at once no longer sort by each other's histogram.
+static _Thread_local uint64 *HIST;
 
 int HSORT(const void *l, const void *r)
 { int x = *((int *) l);
@@ -4177,8 +4176,9 @@ static void die(char *format, ...)
   exit (-1);
 }
 
-static I64 nAlloc = 0;
-static I64 totalAlloc = 0;
+// IMPG PATCH: thread-local. Diagnostics only (the myalloc failure message).
+static _Thread_local I64 nAlloc = 0;
+static _Thread_local I64 totalAlloc = 0;
 
 static void *myalloc(size_t size)
 { void *p;

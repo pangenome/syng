@@ -487,7 +487,7 @@ static bool fillLinearNodes (Rskip rs, int nRun, I64 *iSym, I64 *runLen)
 
 static inline int randomDepth (void) // generate randomDepth with very simple pseudorandom generator
 { int d = 1 ;
-  static U64 rng = 18982392197 ; // a prime - each thread's copy starts with this
+  static _Thread_local U64 rng = 18982392197 ; // a prime - each thread's copy starts with this
   static const int MAX_DEPTH = 32 ; // maximum allowed depth
   rng *= 479 ;  // 479 is prime
   while (((rng >> 24) & 0x7) < 3) { ++d ; rng *= 479 ; }
@@ -720,7 +720,8 @@ static inline int linearSpace (Rskip rs) // returns number of Linear structs ava
 static Rskip rebuildAddLinear (Rskip rs, int k, U32 kSym)
 // NB this increments the dynamic directory sum because buildDynamic() does that
 {
-  static int callCount = 0 ; ++callCount ;
+  // IMPG PATCH: thread-local. Only debug output and die() messages read it.
+  static _Thread_local int callCount = 0 ; ++callCount ;
   // if (callCount == DEBUG) printf ("rebuildAddLinear callCount %d\n", callCount) ;
   int     max = rs.linear->max ; // current size
   Linear *node = rs.linear + max - 1 ; // start at end
@@ -997,7 +998,8 @@ static int addDirect (Rskip *rsp, U32 k, U32 kSym)
 {
   Rskip rs = *rsp ;
   int nSym = rsNsym (rs) ;
-  static U64 callCount = 0 ; ++callCount ;
+  // IMPG PATCH: thread-local. Only debug output and die() messages read it.
+  static _Thread_local U64 callCount = 0 ; ++callCount ;
 
   // linear case first - do increments here and expansions in rebuildAddLinear
   if (rs.linear->max)

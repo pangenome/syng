@@ -564,7 +564,7 @@ int main (int argc, char *argv[])
 	      for (j = 0 ; j < arrayMax (ti->seqInfo) ; ++j, ++nSeq)
 		{ SeqInfo *si = arrp(ti->seqInfo, j, SeqInfo) ;
 		  totSync += si->nSync ;
-		  ++pathCount ; // global path counter
+		  __atomic_fetch_add (&pathCount, 1, __ATOMIC_RELAXED) ; // global path counter
 		  // printf ("path %d\n", pathCount) ;
 		  if (outType == SEQ) oneWriteLine (ofOut, 'S', si->len, seq) ;
 		  else if (outType == PATH || outType == GBWT)
