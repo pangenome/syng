@@ -1,14 +1,13 @@
 # impg patches to syng
 
 This fork of [richarddurbin/syng](https://github.com/richarddurbin/syng) carries
-impg-specific patches on the `impg-integration` branch. Keep this file current
-as patches are added, removed, or upstreamed.
+impg-specific patches on its `main` branch, which the impg submodule pins.
+Keep this file current as patches are added, removed, or upstreamed.
 
-Upstream `main` should be kept in sync with `richarddurbin/syng:main` so we can
-rebase our patches on top as upstream moves. Do not force-push `main` — always
-rebase `impg-integration` against it.
+The `impg-integration` branch is older: it is an ancestor of `main` and holds
+only the first patches. Do not force-push `main`.
 
-## Current patches (on `impg-integration`, newest last)
+## Current patches (on `main`, newest last)
 
 ### `23b6547` — add impg FFI helper wrappers for static-inline functions
 
@@ -121,11 +120,8 @@ cd vendor/syng
 git fetch origin               # origin = pangenome/syng
 git fetch upstream             # add upstream = richarddurbin/syng if needed
 git checkout main
-git merge --ff-only upstream/main
+git merge upstream/main        # may need to resolve conflicts in hash.c
 git push origin main
-git checkout impg-integration
-git rebase main                # may need to resolve conflicts in hash.c
-git push --force-with-lease origin impg-integration
 ```
 
 Then in impg, bump the submodule pointer and commit.
