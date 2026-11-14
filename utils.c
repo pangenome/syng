@@ -210,6 +210,7 @@ FILE *fopenTag (char* root, char* tag, char* mode)
 #define RUSAGE_SELF 0
 #endif
 #include <locale.h>
+#include <pthread.h>
 
 #ifdef RUSAGE_STRUCTURE_DEFINITIONS
 struct rusage {
@@ -240,15 +241,23 @@ struct timeval {
 // IMPG PATCH: thread-local, same reason as the allocation counters above.
 static _Thread_local struct rusage rOld, rFirst ;
 static _Thread_local struct timeval tOld, tFirst ;
+// IMPG PATCH: thread-local like rOld/tOld. A process-global flag made the
+// first call of a second thread subtract that thread's zeroed rOld/tOld.
+static _Thread_local bool isFirst = true ;
+
+// IMPG PATCH: set LC_NUMERIC once per process, not on every call from every
+// thread. Kept because the %'lld thousands separators elsewhere (e.g. the
+// "read GBWT" line in syngBWTread) depend on this side effect.
+static pthread_once_t localeOnce = PTHREAD_ONCE_INIT ;
+static void localeInit (void) { setlocale(LC_NUMERIC, "en_US.UTF-8") ; }
 
 void timeUpdate (FILE *f)
 {
-  static bool isFirst = true ;
   struct rusage rNew ;
   struct timeval tNew ;
   int secs, usecs ;
 
-  setlocale(LC_NUMERIC, "en_US.UTF-8");
+  pthread_once (&localeOnce, localeInit) ;
 
   getrusage (RUSAGE_SELF, &rNew) ;
   gettimeofday(&tNew, 0) ;

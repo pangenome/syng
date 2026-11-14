@@ -81,6 +81,13 @@ them from Rayon worker threads. Several C translation units kept mutable
 | `rskip.c` | `static U64 rng` in `randomDepth` | `_Thread_local` |
 | `syngbwt3.c` | `rsWrite` scratch pointers `iSym`/`runLen`/`size` | `_Thread_local` |
 | `syngbwt3.c`, `syng.c`, `impg_syng_helpers.c` | `pathCount` | `__atomic_*` builtins |
+| `ONElib.c` | `HIST` (read by the `qsort` comparator `HSORT`), `nAlloc`, `totalAlloc` | `_Thread_local` |
+| `ONElib.c` | `isFirst` guarding the `sizeof` checks at file open | `_Static_assert`, flag removed |
+| `syngbwt3.c`, `rskip.c` | `callCount` in `syngBWTadd`, `rebuildAddLinear`, `addDirect` | `_Thread_local` |
+| `utils.c` | `isFirst` in `timeUpdate` | `_Thread_local`, same storage as `rOld`/`tOld` |
+| `utils.c` | `setlocale` on every `timeUpdate` call | `pthread_once` |
+| `hash.c` | `REMOVED`, assigned on every `hashCreate` | `static const` with a constant initializer |
+| `array.c` | `isFirst` in `uArrayCreate` | `_Thread_local` |
 
 Two groups of symptoms:
 
@@ -94,10 +101,10 @@ Two groups of symptoms:
      buffers. Two `SyngIndex` saves running at once — the normal case for the
      `syng-local:<window>` partitioned pipeline — hit a double free or a
      use-after-free on the second writer.
-   - `pathCount` is incremented while indexing and read by `syngBWTnext` /
-     `syngBWTmatch` as a debug gate. `impg_syng_suppress_debug` wrote it during
-     queries. All accesses now use `__atomic_load_n` / `__atomic_fetch_add` /
-     `__atomic_store_n`.
+   - `pathCount` is read by `syngBWTnext` / `syngBWTmatch` as a debug gate. `impg_syng_suppress_debug` wrote it during queries, and in the files impg compiles it is the only writer (the increment in `syng.c` is in the standalone `main`). These accesses now use the GCC/clang builtins `__atomic_load_n` / `__atomic_fetch_add` / `__atomic_store_n`.
+   - `HIST` in `ONElib.c` was repointed by every `vcCreateCodec` while another thread's `qsort` read it, so two ONE files written at once sorted a code table by the other file's histogram.
+
+`timeUpdate` prints nothing on a thread's first call and the deltas since that thread's previous call afterwards.
 
 Replacing the C statics with `_Thread_local` changes `hashStats()` /
 `arrayReport()` to report only the calling thread's totals. Nothing in impg

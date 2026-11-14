@@ -308,7 +308,8 @@ static U32 syngBWTadd (SyngBWT *sb, I32 k, I32 in, U32 inOff, U32 j, I32 out, U3
   U8   *s = arrayp(sb->status, kPos, U8) ;
   static int MAX = 65000 ;
 
-  static U64 callCount = 0 ; ++callCount ;
+  // IMPG PATCH: thread-local. Only debug output and die() messages read it.
+  static _Thread_local U64 callCount = 0 ; ++callCount ;
   if (DEBUG == kPos)
     printf ("syngBWTadd %'llu k %d s %u in %d inOff %u j %u out %d outOff %u\n",
 	    callCount, k, *s, in, inOff, j, out, outOff) ;
@@ -413,8 +414,8 @@ static U32 syngBWTnext (SyngBWT *sb, I32 k, I32 in, U32 inOff, U32 j, I32 *out, 
   U8   s = arr(sb->status, kPos, U8) ;
   if (!s) die ("syngBWTnext %d hit an empty node", k) ;
 
-  // IMPG PATCH: atomic read. `pathCount` is written by concurrent indexing
-  // threads, so a plain load is a data race.
+  // IMPG PATCH: atomic read. impg_syng_suppress_debug() stores `pathCount`
+  // while other threads query, so a plain load is a data race.
   if (__atomic_load_n (&pathCount, __ATOMIC_RELAXED) == PATH_DEBUG)
     { printf ("++path %d k %d in %d j %u\n", PATH_DEBUG, k, in, j) ; nodePrint (&n, s) ; }
 

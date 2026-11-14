@@ -41,8 +41,9 @@ Seqhash *impg_seqhashCreateSafe(int k, int w, int seed)
 
 /* Suppress syngBWTnext debug output by setting pathCount to a non-zero value.
    The debug print triggers when pathCount == PATH_DEBUG (both default to 0).
-   IMPG PATCH: atomic store. This is called while other threads may be
-   indexing and incrementing `pathCount`. */
+   IMPG PATCH: atomic store. This is called while other threads read
+   `pathCount` in syngBWTnext/syngBWTmatch. In the files impg compiles this
+   is the only writer; the increment in syng.c is in the standalone main(). */
 extern int pathCount;
 void impg_syng_suppress_debug(void)
 {

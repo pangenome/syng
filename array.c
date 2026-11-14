@@ -49,7 +49,8 @@ static _Thread_local Array reportArray = 0 ;
 Array uArrayCreate (U64 n, U64 size)
 {
   Array a = (Array) mycalloc (1, sizeof (struct ArrayStruct)) ;
-  static bool isFirst = true ;
+  // IMPG PATCH: thread-local, as is the reportArray it guards.
+  static _Thread_local bool isFirst = true ;
 
   if (isFirst)
     { isFirst = false ;
