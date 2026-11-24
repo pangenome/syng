@@ -113,6 +113,27 @@ reads those reports, so this only affects ad-hoc C-level debugging.
 process (or run `impg partition` with `--gfa-engine syng-local:<window>`), or run
 any multi-threaded syng query under ThreadSanitizer.
 
+### local — no phantom path when an edge longer than 65535 bp creates a node
+
+Fixes `nodeCreateOnePath` in `syngbwt3.c` (added by `dc18190`). A simple node side stores its
+offset in a `U16`, so an edge longer than 65535 bp makes that side an Rskip when the node is
+created. `dc18190` gave that Rskip one run and a directory count of 1, and set the count of the
+other side to 1. That records a second path in the opposite direction that never existed. Its
+rank shift then travels along the path to the next junction node, where the build dies with
+`FATAL ERROR: syngBWTadd -ve output retVal -3` (`RS_ERROR_INDEX_OVERFLOW`), or the GBWT walks
+the wrong nodes without any error. Now each side gets only the path that created the node: the
+side it enters by gets a directory count, the side it leaves by gets a run.
+
+In a random test (2,000 graphs, 30 sequences each, added forward and reverse as impg does,
+5 nodes, edge offsets 10, 20 or 70,000 bp), the old code crashed on 59 graphs and walked wrong
+on 944. The fixed code walked all 2,000 correctly. With offsets of 10 and 20 bp only, both
+versions walked all 2,000 correctly. The smallest crash is one sequence with syncmers 2, 1, 2, 1
+at positions 0, 20, 70,020 and 70,040 (`tests/test_syng_startcount.rs`
+`test_long_edge_paths_walk_back_exactly` in impg). Seen on HPRC release 2 NA20346: hap1 has 3
+edges longer than 65535 bp, and adding one hap2 contig after it crashed.
+
+**Should be upstreamed** together with `dc18190`.
+
 ## Workflow for syncing upstream changes
 
 ```bash

@@ -158,11 +158,12 @@ static inline bool nodeSideCanBeSimple (U32 offset, U32 count)
   return offset <= 0xffffu && count <= 0xffffu ;
 }
 
-static Rskip rskipBuildSingleDynamicSyng (I32 sync, U32 offset, U32 count)
+// runLen = paths leaving through this side, dirCount = paths entering through it
+static Rskip rskipBuildSingleDynamicSyng (I32 sync, U32 offset, U32 runLen, U32 dirCount)
 {
-  I64 iSym = 0, runLen = count ;
-  Rskip rs = rsBuildDynamicSyng (1, &sync, &offset, 1, &iSym, &runLen) ;
-  rsDirSetCount (rs, 0, count) ;
+  I64 iSym = 0, len = runLen ;
+  Rskip rs = rsBuildDynamicSyng (1, &sync, &offset, runLen ? 1 : 0, &iSym, &len) ;
+  rsDirSetCount (rs, 0, dirCount) ;
   return rs ;
 }
 
@@ -172,29 +173,31 @@ static Rskip rskipBuildSingleFixedSyng (I32 sync, U32 offset, U32 count)
   return rsBuildFixedSyng (1, &sync, &offset, 1, &iSym, &runLen) ;
 }
 
+// A positive path enters on in and leaves on out, a negative path enters on out and leaves on in.
+// A simple side counts the paths entering through it. An Rskip side holds one entry per path
+// leaving through it, and its directory counts the paths entering through it. Each side gets
+// only this one path: giving an Rskip side both a run and a directory count adds a phantom path
+// in the other direction, which shifts later ranks (syngBWTadd -ve output retVal -3).
 static void nodeCreateOnePath (Node *node, U8 *status, I32 in, U32 inOff,
-			       I32 out, U32 outOff, bool countInSimple)
+			       I32 out, U32 outOff, bool isPositive)
 {
-  bool simpleIn = nodeSideCanBeSimple (inOff, 1) ;
-  bool simpleOut = nodeSideCanBeSimple (outOff, 1) ;
+  U32 nPos = isPositive ? 1 : 0, nNeg = 1 - nPos ;
 
   *status = NODE_EXISTS ;
 
-  if (simpleIn)
-    { node->in.sync = in ; node->in.offset = inOff ;
-      node->in.count = (countInSimple || !simpleOut) ? 1 : 0 ;
+  if (nodeSideCanBeSimple (inOff, 1))
+    { node->in.sync = in ; node->in.offset = inOff ; node->in.count = nPos ;
       *status |= NODE_SIMPLE_IN ;
     }
   else
-    node->in.rs = rskipBuildSingleDynamicSyng (in, inOff, 1) ;
+    node->in.rs = rskipBuildSingleDynamicSyng (in, inOff, nNeg, nPos) ;
 
-  if (simpleOut)
-    { node->out.sync = out ; node->out.offset = outOff ;
-      node->out.count = (!countInSimple || !simpleIn) ? 1 : 0 ;
+  if (nodeSideCanBeSimple (outOff, 1))
+    { node->out.sync = out ; node->out.offset = outOff ; node->out.count = nNeg ;
       *status |= NODE_SIMPLE_OUT ;
     }
   else
-    node->out.rs = rskipBuildSingleDynamicSyng (out, outOff, 1) ;
+    node->out.rs = rskipBuildSingleDynamicSyng (out, outOff, nPos, nNeg) ;
 }
 
 static inline void nodePrint (Node *n, U8 s)
